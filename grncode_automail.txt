@@ -1,0 +1,97 @@
+function onFormSubmit(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const responsesSheet = ss.getSheetByName("Form responses 1"); // ✅ form response tab name
+  const itemMaster = ss.getSheetByName("Item_Master");
+  const vendorMaster = ss.getSheetByName("Vendor_Master");
+
+  if (!responsesSheet || !itemMaster || !vendorMaster) {
+    Logger.log("One or more sheets are missing.");
+    return;
+  }
+
+  const lastRow = responsesSheet.getLastRow();
+  const data = responsesSheet.getRange(lastRow, 1, 1, responsesSheet.getLastColumn()).getValues()[0];
+
+  const vendorCode = data[4];  // Column E
+  const itemCode = data[6];    // Column G
+
+  const vendorNameCol = 6;     // Column F
+  const itemDescCol = 8;       // Column H
+  const uomCol = 9;            // Column I
+
+  // Vendor Name Lookup
+  const vendorData = vendorMaster.getDataRange().getValues();
+  let vendorName = "";
+  for (let i = 1; i < vendorData.length; i++) {
+    if (vendorData[i][0].toString().toLowerCase() === vendorCode.toString().toLowerCase()) {
+      vendorName = vendorData[i][1];
+      break;
+    }
+  }
+  responsesSheet.getRange(lastRow, vendorNameCol).setValue(vendorName);
+
+  // Item Description & UOM Lookup
+  const itemData = itemMaster.getDataRange().getValues();
+  let itemDesc = "";
+  let uom = "";
+  for (let i = 1; i < itemData.length; i++) {
+    if (itemData[i][0].toString() === itemCode.toString()) {
+      itemDesc = itemData[i][1];
+      uom = itemData[i][2];
+      break;
+    }
+  }
+  responsesSheet.getRange(lastRow, itemDescCol).setValue(itemDesc);
+  if (uom) {
+    responsesSheet.getRange(lastRow, uomCol).setValue(uom);
+  }
+
+  // GRN Number Generation
+  const grnNum = "GRN-" + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "yyyyMMdd") + "-" + lastRow;
+  responsesSheet.getRange(lastRow, 1).setValue(grnNum); // Column A = GRN Number
+
+  // ✅ Fetch updated data after auto-fill
+  const updatedRowData = responsesSheet.getRange(lastRow, 1, 1, responsesSheet.getLastColumn()).getValues()[0];
+
+  // ✅ Generate PDF and Email
+  generateGRNPdfAndEmail(updatedRowData, grnNum);
+
+  Logger.log("Process complete: Auto-fill, GRN, PDF, and Email for row " + lastRow);
+}
+
+function generateGRNPdfAndEmail(rowData, grnNum) {
+  const doc = DocumentApp.create(grnNum + " - GRN");
+  const body = doc.getBody();
+
+  body.appendParagraph("GOODS RECEIPT NOTE").setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  body.appendParagraph("\nGRN Number: " + grnNum);
+  body.appendParagraph("GRN Date: " + rowData[1]);
+  body.appendParagraph("GIE Number: " + rowData[2]);
+  body.appendParagraph("PO Number: " + rowData[3]);
+  body.appendParagraph("Vendor Code: " + rowData[4]);
+  body.appendParagraph("Vendor Name: " + rowData[5]);
+  body.appendParagraph("Item Code: " + rowData[6]);
+  body.appendParagraph("Item Description: " + rowData[7]);
+  body.appendParagraph("Quantity Received: " + rowData[9]);
+  body.appendParagraph("Quantity Accepted: " + rowData[10]);
+  body.appendParagraph("Quantity Rejected: " + rowData[11]);
+  body.appendParagraph("\n\nApproved By: _______________________");
+
+  doc.saveAndClose();
+
+  // Export to PDF
+  const pdfFile = DriveApp.getFileById(doc.getId()).getAs("application/pdf");
+  const pdfName = grnNum + ".pdf";
+  const savedPdf = DriveApp.createFile(pdfFile).setName(pdfName);
+
+  // Email the PDF
+  GmailApp.sendEmail("gowtham@masterindia.in", 
+    "Goods Receipt Note - " + grnNum,
+    "Dear Gowtham,\n\nPlease find attached the GRN generated for the recent material receipt.\n\nRegards,\nGRN System",
+    {
+      attachments: [savedPdf],
+      name: "MPee GRN Bot"
+    });
+
+  Logger.log("PDF generated, saved to Drive, and emailed.");
+}
