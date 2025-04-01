@@ -1,0 +1,47 @@
+function submitStoresIssue() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const formSheet = ss.getSheetByName("Stores_Issue_Form");
+  const issueSheet = ss.getSheetByName("Stores_Issue");
+  const wipSheet = ss.getSheetByName("WIP_Inward");
+
+  const date = formSheet.getRange("A2").getValue();
+  const jobCard = formSheet.getRange("B2").getValue();
+  const fgCode = formSheet.getRange("C2").getValue();
+  const fgDesc = formSheet.getRange("D2").getValue();
+  const qtyPlanned = formSheet.getRange("E2").getValue();
+
+  const rmStartRow = 8;
+  const rmCodes = formSheet.getRange("A" + rmStartRow + ":A").getValues();
+  const rmDescs = formSheet.getRange("B" + rmStartRow + ":B").getValues();
+  const bomQtys = formSheet.getRange("C" + rmStartRow + ":C").getValues();
+  const reqQtys = formSheet.getRange("E" + rmStartRow + ":E").getValues();
+  const issuedQtys = formSheet.getRange("F" + rmStartRow + ":F").getValues();
+
+  // Create a unique MR No
+  const timestamp = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "yyyyMMdd-HHmmss");
+  const mrNo = "MR-" + timestamp;
+
+  for (let i = 0; i < rmCodes.length; i++) {
+    const rmCode = rmCodes[i][0];
+    const rmDesc = rmDescs[i][0];
+    const bomQty = bomQtys[i][0];
+    const reqQty = reqQtys[i][0];
+    const issuedQty = issuedQtys[i][0];
+
+    if (rmCode && issuedQty > 0) {
+      // Log in Stores_Issue
+      issueSheet.appendRow([
+        date, jobCard, fgCode, fgDesc,
+        rmCode, rmDesc, bomQty, qtyPlanned, reqQty, issuedQty, mrNo
+      ]);
+
+      // Log in WIP_Inward
+      wipSheet.appendRow([
+        date, jobCard, fgCode, fgDesc,
+        rmCode, rmDesc, issuedQty, mrNo
+      ]);
+    }
+  }
+
+  SpreadsheetApp.getUi().alert("Stores Issue submitted successfully as " + mrNo);
+}
