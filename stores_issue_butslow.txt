@@ -1,0 +1,65 @@
+function submitStoresIssue() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const formSheet = ss.getSheetByName("Stores_Issue_Form");
+  const issueSheet = ss.getSheetByName("Stores_Issue");
+  const wipSheet = ss.getSheetByName("WIP_Inward");
+
+  const date = formSheet.getRange("A2").getValue(); // Issue Date
+  const jobCard = formSheet.getRange("B2").getValue();
+  const fgCode = formSheet.getRange("C2").getValue();
+  const fgDesc = formSheet.getRange("D2").getValue();
+  const qtyPlanned = formSheet.getRange("E2").getValue();
+
+  const rmStartRow = 8;
+  const rmCodes = formSheet.getRange("A" + rmStartRow + ":A").getValues();
+  const rmDescs = formSheet.getRange("B" + rmStartRow + ":B").getValues();
+  const issuedQtys = formSheet.getRange("F" + rmStartRow + ":F").getValues();
+
+  const dateFormatted = Utilities.formatDate(new Date(date), ss.getSpreadsheetTimeZone(), "dd-MM-yyyy");
+
+  // Find the correct column in Stores_Issue sheet based on date
+  const headerRow = issueSheet.getRange(1, 3, 1, issueSheet.getLastColumn()).getValues()[0];
+  const dateColIndex = headerRow.findIndex(h => {
+    if (!h) return false;
+    return Utilities.formatDate(new Date(h), ss.getSpreadsheetTimeZone(), "dd-MM-yyyy") === dateFormatted;
+  });
+
+  if (dateColIndex === -1) {
+    SpreadsheetApp.getUi().alert("Date column not found in Stores_Issue sheet for " + dateFormatted);
+    return;
+  }
+
+  const issueCol = dateColIndex + 3; // Add 3 since date headers start from column C (index 3)
+
+ const maxRows = 32; // or however many item rows you have
+ const itemCodes = issueSheet.getRange("A2:A" + (maxRows + 1)).getValues();
+
+  for (let i = 0; i < rmCodes.length; i++) {
+    const rmCode = rmCodes[i][0];
+    const rmDesc = rmDescs[i][0];
+    const issuedQty = issuedQtys[i][0];
+
+    if (rmCode && issuedQty > 0) {
+      const rowIndex = itemCodes.findIndex(row => row[0] === rmCode) + 2; // +2 since data starts from row 2
+      if (rowIndex >= 2) {
+        issueSheet.getRange(rowIndex, issueCol).setValue(issuedQty);
+        issueSheet.getRange(rowIndex, issueCol).setComment("Job Card: " + jobCard);
+      }
+
+      // Log to WIP_Inward (you can adjust this structure too)
+      wipSheet.appendRow([
+        date, jobCard, fgCode, fgDesc, rmCode, rmDesc, issuedQty
+      ]);
+    }
+  }
+
+  SpreadsheetApp.getUi().alert("Stores Issue logged successfully for " + dateFormatted);
+}
+function clearStoresIssueData() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Stores_Issue");
+
+  // Clear quantities and comments from issue matrix (C2:Z100 — adjust range as needed)
+  const range = sheet.getRange("C2:Z100");
+  range.clearContent();    // Removes the numbers (issued qty)
+  range.clearComment();    // Removes the cell comments (like MR No, Job Card)
+}
